@@ -15,7 +15,7 @@ By understanding these exception types, you can effectively manage your AWS Conf
 
 ## Architecture at a Glance
 
-![ELM Architecture](C:\Users\91891\Documents\MyFiles\Config_Team\Exception_Deletion\DOCS\ELM_Architecture_Diagram.png)
+![ELM_Architecture](https://github.com/Subham-sarkar/event-driven-architecture/assets/45092750/e48a0d89-5a46-4ec3-b55e-2069256be4cb)
 
 The ELM automation framework consists of three main components:
 	elm-send-events.yaml
