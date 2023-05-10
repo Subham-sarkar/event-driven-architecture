@@ -18,9 +18,10 @@ By understanding these exception types, you can effectively manage your AWS Conf
 ![ELM_Architecture](https://github.com/Subham-sarkar/event-driven-architecture/assets/45092750/e48a0d89-5a46-4ec3-b55e-2069256be4cb)
 
 The ELM automation framework consists of three main components:
-	elm-send-events.yaml
-	elm-status-update.yaml
-	elm-status-update.py
+
+*	elm-send-events.yaml
+*	elm-status-update.yaml
+*	elm-status-update.py
 
 The ELM architecture is an advanced exception management system designed to automate the process of updating the exception status of deleted resources in the Config-ResourceExceptions table. To achieve this, the architecture employs a sophisticated network of Event Bridge rules, an SQS queue, and a Lambda function.
 
@@ -34,9 +35,10 @@ With the ELM architecture, you can achieve a high degree of automation and effic
 ## Automation Components
 
 The ELM automation framework consists of three main components:
-	elm-send-events.yaml
-	elm-status-update.yaml
-	elm-status-update.py.
+
+*	elm-send-events.yaml
+*	elm-status-update.yaml
+*	elm-status-update.py.
 
 The first component, elm-send-events.yaml, sets up the default Event Bridge rule and IAM role in all target accounts, which enables sending compliance change notifications to the production account in the us-east-1 region.
 
@@ -45,24 +47,8 @@ The second component, elm-status-update.yaml, updates the exception status in th
 The third component, elm-status-update.py, fetches all composite exceptions using a filter expression and loops over and updates all exceptions in the table. With these components, you can easily manage exceptions and ensure the security and compliance of your AWS resources.
 
 
-## Event Pattern:
+## Event Pattern
 
-detail:
-    messageType:
-        - "ComplianceChangeNotification"
-    configRuleName:
-        - prefix: !If [CreateProdResources, 'prod-', !Sub '${Environment}-']
-    oldEvaluationResult:
-        complianceType:
-            - COMPLIANT
-            - NON_COMPLIANT
-        annotation:
-            - This resource is an exception.
-            - Recorded exception has expired.
-            - Recorded exception has been deleted because of no recertification.
-    newEvaluationResult:
-        complianceType:
-            - NOT_APPLICABLE
-        annotation:
-            - prefix: Resource was deleted
+![event pattern](https://github.com/Subham-sarkar/event-driven-architecture/assets/45092750/4f1fe96e-9a18-462e-83b3-e39893c88868)
+
 
