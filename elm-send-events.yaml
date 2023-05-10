@@ -1,0 +1,84 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description:
+  AWS CloudFormation Template.
+
+Parameters:
+  Environment:
+    AllowedValues: [DEV, QA, PROD]
+    ConstraintDescription: must specify Prod, Dev, or Test.
+    Default: DEV
+    Description: Deployment Environment.
+    Type: String
+
+  DestinationAccount:
+    Type: String
+    Description: Destination account where the events are sent.
+  
+  DestinationRegion:
+    Type: String
+    Description: Destination region where the events are sent.
+
+Conditions:
+  CreateProdResources: !Equals [!Ref Environment, PROD]
+
+Resources:
+  EventRule:
+    Type: "AWS::Events::Rule"
+    Properties:
+      Description: >-
+        Events Rule to integrate CloudWatch with AWS Config for filtering COMPLIANT resources which are exception from the provided list of custom config rules.
+      Name: !If [CreateProdResources, 'Deleted-Exception-Event-Rule', !Sub '${Environment}-Deleted-Exception-Event-Rule']
+      EventPattern:
+        source:
+          - "aws.config"
+        detail-type:
+          - "Config Rules Compliance Change"
+        detail:
+          messageType:
+            - "ComplianceChangeNotification"
+          configRuleName:
+            - prefix: !If [CreateProdResources, '', !Sub '${Environment}-']
+          oldEvaluationResult:
+            complianceType:
+              - COMPLIANT
+              - NON_COMPLIANT
+            annotation:
+              - This resource is an exception.
+              - Recorded exception has expired.
+              - Recorded exception has been deleted because of no recertification.
+          newEvaluationResult:
+            complianceType:
+              - NOT_APPLICABLE
+            annotation:
+              - prefix: Resource was deleted
+      State: "ENABLED"
+      Targets:
+      - Arn: !Sub 'arn:aws:events:${DestinationRegion}:${DestinationAccount}:event-bus/default'
+        Id: 'EventDestinationBus'
+        RoleArn: !GetAtt 
+          - EventBridgeIAMrole
+          - Arn
+
+  EventBridgeIAMrole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: events.amazonaws.com
+          Action: sts:AssumeRole
+      Path: /
+      PermissionsBoundary: !Sub 'arn:aws:iam::${AWS::AccountId}:policy/PB-Standard'
+      Policies:
+      - PolicyName: PutEventsBusToBus
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - events:PutEvents
+            Resource:
+            - !Sub 'arn:aws:events:${DestinationRegion}:${DestinationAccount}:event-bus/default'

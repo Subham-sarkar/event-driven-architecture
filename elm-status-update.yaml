@@ -1,0 +1,239 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description:
+  AWS CloudFormation Template.
+
+Parameters:
+  Environment:
+    AllowedValues: [DEV, QA, PROD]
+    ConstraintDescription: must specify Prod, Dev, or Test.
+    Default: DEV
+    Description: Deployment Environment.
+    Type: String
+
+  ExpirationTime:
+    ConstraintDescription: must specify time in minutes.
+    Default: 5
+    Description: Deployment Environment.
+    Type: Number
+
+  QueueName:
+    Type: String
+    Default: EventQueue
+    Description: SQS Queue Name
+
+  DeploymentPackage:
+    Description: Zip file name to fetch lambda code from.
+    Default: elm-status-update
+    Type: String
+
+Conditions:
+  CreateProdResources: !Equals [!Ref Environment, PROD]
+
+Mappings:
+  AWSRegion2LambdaFunctionBucketV2:
+    ap-northeast-1:
+      PROD: cloud-lambda-functions-ap-northeast-1
+      QA: qa-cloud-lambda-functions-ap-northeast-1
+    ap-northeast-2:
+      PROD: cloud-lambda-functions-ap-northeast-2
+      QA: qa-cloud-lambda-functions-ap-northeast-2
+    ap-south-1:
+      PROD: cloud-lambda-functions-ap-south-1
+      QA: qa-cloud-lambda-functions-ap-south-1
+    ap-southeast-1:
+      PROD: cloud-lambda-functions-ap-southeast-1
+      QA: qa-cloud-lambda-functions-ap-southeast-1
+    ap-southeast-2:
+      PROD: cloud-lambda-functions-ap-southeast-2
+      QA: qa-cloud-lambda-functions-ap-southeast-2
+    eu-central-1:
+      PROD: cloud-lambda-functions-eu-central-1
+      QA: qa-cloud-lambda-functions-eu-central-1
+    ca-central-1:
+      PROD: cloud-lambda-functions-ca-central-1
+      QA: qa-cloud-lambda-functions-ca-central-1
+    eu-west-1:
+      PROD: cloud-lambda-functions-eu-west
+      QA: qa-cloud-lambda-functions-eu-west
+    eu-west-2:
+      PROD: cloud-lambda-functions-eu-west-2
+      QA: qa-cloud-lambda-functions-eu-west-2
+    eu-west-3:
+      PROD: cloud-lambda-functions-eu-west-3
+      QA: qa-cloud-lambda-functions-eu-west-3
+    sa-east-1:
+      PROD: cloud-lambda-functions-sa-east-1
+      QA: qa-cloud-lambda-functions-sa-east-1
+    us-east-1:
+      PROD: cloud-lambda-functions-us-east
+      QA: qa-cloud-lambda-functions-us-east
+    us-east-2:
+      PROD: cloud-lambda-functions-us-east-2
+      QA: qa-cloud-lambda-functions-us-east-2
+    us-west-1:
+      PROD: cloud-lambda-functions-us-west1
+      QA: qa-cloud-lambda-functions-us-west1
+    us-west-2:
+      DEV: dev-config-us-west-2
+      PROD: cloud-lambda-functions-us-west2
+      QA: qa-cloud-lambda-functions-us-west2
+
+Resources:
+  EventQueue:
+    Type: "AWS::SQS::Queue"
+    Properties:
+      QueueName: !If [CreateProdResources, !Sub '${QueueName}', !Sub '${Environment}-${QueueName}']
+      VisibilityTimeout: 3600
+
+  EventBusCrossAccountPolicyStatement: 
+    Type: AWS::Events::EventBusPolicy
+    Properties: 
+      EventBusName: default
+      StatementId: "CrossAccountPolicy"
+      Statement: 
+        Effect: "Allow"
+        Principal: 
+          AWS: "*"
+        Action: "events:PutEvents"
+        Resource: !Sub 'arn:aws:events:${AWS::Region}:${AWS::AccountId}:event-bus/default'
+        Condition:
+          StringEquals:
+            aws:PrincipalOrgID: o-06kahbwys8
+
+  EventRule:
+    Type: "AWS::Events::Rule"
+    Properties:
+      Description: >-
+        Events Rule to send deleted exception events to SQS.
+      Name: !If [CreateProdResources, 'Send-To-SQS-Event-Rule', !Sub '${Environment}-Send-To-SQS-Event-Rule']
+      EventPattern:
+        source:
+          - "aws.config"
+        detail-type:
+          - "Config Rules Compliance Change"
+        detail:
+          messageType:
+            - "ComplianceChangeNotification"
+          configRuleName:
+            - prefix: !If [CreateProdResources, '', !Sub '${Environment}-']
+          oldEvaluationResult:
+            complianceType:
+              - COMPLIANT
+              - NON_COMPLIANT
+            annotation:
+              - This resource is an exception.
+              - Recorded exception has expired.
+              - Recorded exception has been deleted because of no recertification.
+          newEvaluationResult:
+            complianceType:
+              - NOT_APPLICABLE
+            annotation:
+              - prefix: Resource was deleted
+      State: "ENABLED"
+      Targets:
+        - 
+          Arn: !GetAtt EventQueue.Arn
+          Id: !GetAtt EventQueue.QueueName
+
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: Role-ResourceExceptionConsistency
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: lambda.amazonaws.com
+          Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Path: /
+      PermissionsBoundary: !Sub 'arn:aws:iam::${AWS::AccountId}:policy/PB-Standard'
+      Policies:
+      - PolicyName: Policy-ResourceExceptionConsistency
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - config:ListDiscoveredResources
+              Resource: '*'
+            - Effect: Allow
+              Action:
+                - dynamodb:Scan
+                - dynamodb:UpdateItem
+              Resource:
+                - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/Config-Master"
+                - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/Config-ResourceExceptions"
+            - Effect: Allow
+              Action:
+                - sqs:DeleteMessage
+                - sqs:GetQueueUrl
+                - sqs:ChangeMessageVisibility
+                - sqs:ReceiveMessage
+                - sqs:GetQueueAttributes
+              Resource: !GetAtt EventQueue.Arn
+            - Effect: Allow
+              Action:
+                - sts:AssumeRole
+              Resource: "arn:aws:iam::*:role/Role-Config-Mgmt"
+
+  MonitorEventLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !If [CreateProdResources, !Sub 'MonitorEventLambda', !Sub '${Environment}-MonitorEventLambda']
+      Environment:
+        Variables:
+          EXPIRATION_TIME: !Ref ExpirationTime
+      Code:
+        S3Bucket: !FindInMap
+          - AWSRegion2LambdaFunctionBucketV2
+          - !Ref 'AWS::Region'
+          - !Ref 'Environment'
+        S3Key: !Sub '${DeploymentPackage}.zip'
+      Handler: !Sub '${DeploymentPackage}.lambda_handler'
+      Description: The Lambda function monitors deleted exceptions.
+      Runtime: python3.9
+      Timeout: '900'
+      Role: !GetAtt LambdaExecutionRole.Arn
+
+  LambdaLogGroup: 
+    Type: AWS::Logs::LogGroup
+    Properties: 
+      LogGroupName: !Sub /aws/lambda/${MonitorEventLambda}
+      RetentionInDays: 7
+
+  PermissionForSQSToInvokeLambda:
+    Type: "AWS::Lambda::Permission"
+    Properties:
+      FunctionName: !Ref MonitorEventLambda
+      Action: "lambda:InvokeFunction"
+      Principal: "sqs.amazonaws.com"
+      SourceArn: !GetAtt EventQueue.Arn
+
+  LambdaFunctionEventSourceMapping:
+    Type: AWS::Lambda::EventSourceMapping
+    Properties:
+      BatchSize: 1
+      Enabled: true
+      EventSourceArn: !GetAtt EventQueue.Arn
+      FunctionName: !GetAtt MonitorEventLambda.Arn
+
+  SQSQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - !Ref EventQueue
+      PolicyDocument:
+        Version: '2012-10-17'
+        Id: EventAccess
+        Statement:
+        - Sid: CloudWatch-Send-Message
+          Effect: Allow
+          Principal:
+            Service:
+            - 'events.amazonaws.com'
+          Action: ['sqs:SendMessage']
+          Resource: !GetAtt EventQueue.Arn
