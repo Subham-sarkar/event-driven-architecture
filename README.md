@@ -5,14 +5,6 @@
 ELM Automation is a powerful tool that enables the automatic updating of exception status in the Config-ResourceExceptions table in the production account for all deleted exceptions across multiple target accounts. With ELM Automation, you can streamline your exception management process and ensure that your systems remain secure and compliant at all times. This is an example of an event based system.
 
 
-## Types of Exceptions
-
-When working with AWS Config, it's important to understand the different types of exceptions that can occur. There are three main exception types: SIMPLE Exception (Resource ID), SIMPLE Exception (Resource ARN), and COMPOSITE Exceptions.
-SIMPLE Exceptions occur when a single resource is marked as an exception in the AWS Config rule. This can be done using either the resource ID or the resource ARN, depending on the use case.
-COMPOSITE Exceptions, on the other hand, occur when multiple resources are marked as exceptions for a single AWS Config rule. This is useful when you want to apply a single exception to a group of resources instead of applying the exception to each resource individually.
-By understanding these exception types, you can effectively manage your AWS Config rules and ensure that your resources are always in compliance with our organization's policies and standards.
-
-
 ## Architecture at a Glance
 
 ![ELM_Architecture](https://github.com/Subham-sarkar/event-driven-architecture/assets/45092750/e48a0d89-5a46-4ec3-b55e-2069256be4cb)
@@ -30,6 +22,19 @@ First, an Event Bridge rule is established in all target accounts across all reg
 Upon receipt of the notification by the default bus in the production account, another Event Bridge rule monitors the notification and sends it to an SQS queue. This, in turn, triggers a Lambda function, which then updates the status of the exception record as RESOURCE_DELETED in the Config_ResourceExceptions table. The Lambda function also sets the TTL to the required epoch value so that the record gets deleted by DynamoDB itself.
 
 With the ELM architecture, you can achieve a high degree of automation and efficiency in your exception management process. This ensures that your systems remain secure and compliant, and that you can focus on other critical aspects of your business operations.
+
+
+## Types of Exceptions
+
+When working with AWS Config, it's important to understand the different types of exceptions that can occur. There are three main exception types: 
+
+* SIMPLE Exception (Resource ID)
+* SIMPLE Exception (Resource ARN)
+* COMPOSITE Exceptions.
+
+SIMPLE Exceptions occur when a single resource is marked as an exception in the AWS Config rule. This can be done using either the resource ID or the resource ARN, depending on the use case. COMPOSITE Exceptions, on the other hand, occur when multiple resources are marked as exceptions for a single AWS Config rule. This is useful when you want to apply a single exception to a group of resources instead of applying the exception to each resource individually.
+
+By understanding these exception types, you can effectively manage your AWS Config rules and ensure that your resources are always in compliance with our organization's policies and standards.
 
 
 ## Automation Components
